@@ -167,6 +167,9 @@ def create_bucket(bucket_name):
     s3_resource = boto3.resource('s3', region_name=region_name)
     bucket = s3_resource.Bucket(bucket_name)
     bucket.wait_until_exists()
+    # Turn on versioning
+    s3_client.put_bucket_versioning(Bucket=bucket_name,
+                                    VersioningConfiguration={'Status': 'Enabled'})
     return bucket
 
 
