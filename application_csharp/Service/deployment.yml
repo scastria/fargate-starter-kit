@@ -1,0 +1,312 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Fargate Starter Kit
+Parameters:
+  FSKDeploymentProjectName:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSImageName:
+    Type: String
+    Default: "XXXECSImageNameXXX"
+  ECSUseSSL:
+    AllowedValues:
+      - "false"
+      - "true"
+    Type: String
+    Default: "true"
+  ECSLogRegion:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSVpc:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSSubnet1:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSSubnet2:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSCertificate:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSHealthCheck:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSDomainName:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSDNSName:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  TagContact:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  TagService:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  TagEnvironment:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+Conditions:
+  ShouldUseSSL: !Equals [ !Ref ECSUseSSL, "true"]
+Resources:
+  ECSExecuteRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ecs-tasks.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+      RoleName: !Sub "${FSKDeploymentProjectName}-ExecuteTask"
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ecs-tasks.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+        - "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+      RoleName: !Sub "${FSKDeploymentProjectName}-Task"
+  ECSAutoScaleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "application-autoscaling.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole"
+      RoleName: !Sub "${FSKDeploymentProjectName}-AutoScale"
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref FSKDeploymentProjectName
+      Tags:
+        -
+          Key: "Contact"
+          Value: !Ref TagContact
+        -
+          Key: "Service"
+          Value: !Ref TagService
+        -
+          Key: "Environment"
+          Value: !Ref TagEnvironment
+  ECSLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${FSKDeploymentProjectName}"
+  ECSTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+        -
+          Environment:
+            -
+              Name: "ASPNETCORE_ENVIRONMENT"
+              Value: !Ref TagEnvironment
+          Image: !Ref ECSImageName
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref ECSLogRegion
+              awslogs-stream-prefix: "ecs"
+          Name: !Ref FSKDeploymentProjectName
+          PortMappings:
+            -
+              ContainerPort: 80
+              HostPort: 80
+              Protocol: "tcp"
+      Cpu: "512"
+      ExecutionRoleArn: !GetAtt ECSExecuteRole.Arn
+      Family: !Ref FSKDeploymentProjectName
+      Memory: "1024"
+      NetworkMode: "awsvpc"
+      RequiresCompatibilities:
+        - "FARGATE"
+      Tags:
+        -
+          Key: "Contact"
+          Value: !Ref TagContact
+        -
+          Key: "Service"
+          Value: !Ref TagService
+        -
+          Key: "Environment"
+          Value: !Ref TagEnvironment
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+  ECSSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub "${FSKDeploymentProjectName}-Application"
+      GroupName: !Sub "${FSKDeploymentProjectName}-Application"
+      SecurityGroupIngress:
+        -
+          CidrIp: "0.0.0.0/0"
+          FromPort: 80
+          IpProtocol: "tcp"
+          ToPort: 80
+        -
+          CidrIp: "0.0.0.0/0"
+          FromPort: 443
+          IpProtocol: "tcp"
+          ToPort: 443
+      Tags:
+        -
+          Key: "Contact"
+          Value: !Ref TagContact
+        -
+          Key: "Service"
+          Value: !Ref TagService
+        -
+          Key: "Environment"
+          Value: !Ref TagEnvironment
+      VpcId: !Ref ECSVpc
+  ECSTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPath: !Ref ECSHealthCheck
+      HealthCheckProtocol: "HTTP"
+      Name: !Ref FSKDeploymentProjectName
+      Port: 80
+      Protocol: "HTTP"
+      Tags:
+        -
+          Key: "Contact"
+          Value: !Ref TagContact
+        -
+          Key: "Service"
+          Value: !Ref TagService
+        -
+          Key: "Environment"
+          Value: !Ref TagEnvironment
+      TargetType: "ip"
+      VpcId: !Ref ECSVpc
+  ECSLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: "ipv4"
+      Name: !Ref FSKDeploymentProjectName
+      Scheme: "internet-facing"
+      SecurityGroups:
+        - !GetAtt ECSSecurityGroup.GroupId
+      Subnets:
+        - !Ref ECSSubnet1
+        - !Ref ECSSubnet2
+      Tags:
+        -
+          Key: "Contact"
+          Value: !Ref TagContact
+        -
+          Key: "Service"
+          Value: !Ref TagService
+        -
+          Key: "Environment"
+          Value: !Ref TagEnvironment
+      Type: "application"
+  ECSLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+        !If
+          - ShouldUseSSL
+          -
+            - CertificateArn: !Ref ECSCertificate
+          - !Ref "AWS::NoValue"
+      DefaultActions:
+        -
+          TargetGroupArn: !Ref ECSTargetGroup
+          Type: "forward"
+      LoadBalancerArn: !Ref ECSLoadBalancer
+      Port: !If [ShouldUseSSL, 443, 80]
+      Protocol: !If [ShouldUseSSL, "HTTPS", "HTTP"]
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: "ECSLoadBalancerListener"
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: 2
+      LaunchType: "FARGATE"
+      LoadBalancers:
+        -
+          ContainerName: !Ref FSKDeploymentProjectName
+          ContainerPort: 80
+          TargetGroupArn: !Ref ECSTargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: "ENABLED"
+          SecurityGroups:
+            - !GetAtt ECSSecurityGroup.GroupId
+          Subnets:
+            - !Ref ECSSubnet1
+            - !Ref ECSSubnet2
+      PropagateTags: "SERVICE"
+      Tags:
+        -
+          Key: "Contact"
+          Value: !Ref TagContact
+        -
+          Key: "Service"
+          Value: !Ref TagService
+        -
+          Key: "Environment"
+          Value: !Ref TagEnvironment
+      TaskDefinition: !Ref ECSTaskDef
+  ECSRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt ECSLoadBalancer.DNSName
+        HostedZoneId: !GetAtt ECSLoadBalancer.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${ECSDomainName}."
+      Name: !Sub "${ECSDNSName}."
+      Type: "A"
+  ECSAutoScaleTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 10
+      MinCapacity: 2
+      ResourceId: !Sub "service/${ECSCluster}/${ECSService.Name}"
+      RoleARN: !GetAtt ECSAutoScaleRole.Arn
+      ScalableDimension: "ecs:service:DesiredCount"
+      ServiceNamespace: "ecs"
+  ECSAutoScalePolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${FSKDeploymentProjectName}-AutoScale"
+      PolicyType: "TargetTrackingScaling"
+      ScalingTargetId: !Ref ECSAutoScaleTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: "ECSServiceAverageCPUUtilization"
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 300
+        TargetValue: 80
+Outputs:
+  ServiceURL:
+    Value:
+      !If
+        - ShouldUseSSL
+        - !Sub "https://${ECSDNSName}"
+        - !Sub "http://${ECSDNSName}"

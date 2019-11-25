@@ -1,0 +1,38 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      dotnet: 2.2
+      docker: 18
+  pre_build:
+    commands:
+      # Get current value of BUILD_NUMBER
+      - BUILD_NUMBER=`aws ssm get-parameter --name $DEPLOYMENT_PROJECT_BUILD_NUMBER --query Parameter.Value --output text`
+      - echo Got build number $BUILD_NUMBER
+      # Increment BUILD_NUMBER for next time
+      - aws ssm put-parameter --name $DEPLOYMENT_PROJECT_BUILD_NUMBER --value $((BUILD_NUMBER+1)) --type String --overwrite
+      - echo Incremented build number
+      # Calculate full version
+      - FULL_VERSION=$RELEASE_VERSION.$BUILD_NUMBER
+      - echo Full version is $FULL_VERSION
+      # Restore dependencies
+      - dotnet restore
+      # Login to AWS ECR to allow pushing new docker image
+      - $(aws ecr get-login --no-include-email)
+  build:
+    commands:
+      # Build and stage output
+      - dotnet publish -c Release -p:Version=$FULL_VERSION --no-restore -o ./publish $PROJECT_DIR
+      # Generate docker image
+      - docker build -t $IMAGE_NAME:$FULL_VERSION $PROJECT_DIR/publish
+  post_build:
+    commands:
+      # Push docker image to AWS ECR
+      - docker push $IMAGE_NAME:$FULL_VERSION
+      # Inject final docker image URI into deployment CF template
+      - echo Injecting FULL_VERSION into deployment template
+      - sed -i s@XXXECSImageNameXXX@$IMAGE_NAME:$FULL_VERSION@g $PROJECT_DIR/publish/deployment.yml
+artifacts:
+  base-directory: '$PROJECT_DIR/publish'
+  files:
+    - 'deployment.yml'

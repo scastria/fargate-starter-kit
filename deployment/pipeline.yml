@@ -1,0 +1,365 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Fargate Starter Kit
+Parameters:
+  FSKDeploymentProjectName:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECRRepoName:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSImageName:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSUseSSL:
+    AllowedValues:
+      - "false"
+      - "true"
+    Type: String
+    Default: "true"
+  ECSLogRegion:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSStackName:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSVpc:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSSubnet1:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSSubnet2:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSCertificate:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSHealthCheck:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSDomainName:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSDNSName:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  ECSReleaseVersion:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  CBProjectDirEnv:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  CBBuildNumberName:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  CPRegion:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  CodeBucket:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  CodeZip:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  TagContact:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  TagService:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+  TagEnvironment:
+    Type: String
+    Default: "Override-This-Parameter-Value"
+Resources:
+  ECRRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref ECRRepoName
+      Tags:
+        -
+          Key: "Contact"
+          Value: !Ref TagContact
+        -
+          Key: "Service"
+          Value: !Ref TagService
+        -
+          Key: "Environment"
+          Value: !Ref TagEnvironment
+  CPPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${FSKDeploymentProjectName}-Pipeline"
+      PolicyDocument:
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Action": [
+                "application-autoscaling:*",
+                "autoscaling:*",
+                "cloudformation:*",
+                "cloudwatch:*",
+                "codebuild:BatchGetBuilds",
+                "codebuild:StartBuild",
+                "codecommit:CancelUploadArchive",
+                "codecommit:GetBranch",
+                "codecommit:GetCommit",
+                "codecommit:GetUploadArchiveStatus",
+                "codecommit:UploadArchive",
+                "codedeploy:CreateDeployment",
+                "codedeploy:GetApplicationRevision",
+                "codedeploy:GetDeployment",
+                "codedeploy:GetDeploymentConfig",
+                "codedeploy:RegisterApplicationRevision",
+                "ec2:*",
+                "ecs:*",
+                "elasticloadbalancing:*",
+                "glue:*",
+                "iam:PassRole",
+                "rds:*",
+                "s3:*",
+                "sns:*",
+                "sqs:*",
+                "states:*"
+              ],
+              "Resource": "*",
+              "Effect": "Allow"
+            },
+            {
+              "Action": [
+                "iam:GetRole",
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:PutRolePolicy",
+                "iam:AttachRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:DetachRolePolicy"
+              ],
+              "Resource": [
+                "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:role/*"
+              ],
+              "Effect": "Allow"
+            },
+            {
+              "Action": [
+                "iam:GetPolicy",
+                "iam:CreatePolicy",
+                "iam:ListPolicyVersions",
+                "iam:DeletePolicyVersion",
+                "iam:DeletePolicy"
+              ],
+              "Resource": [
+                "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:policy/*"
+              ],
+              "Effect": "Allow"
+            }
+          ]
+        }
+  CBRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "codebuild.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - !Ref CPPolicy
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+        - "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"
+        - "arn:aws:iam::aws:policy/AmazonSSMFullAccess"
+        - "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+      RoleName: !Sub '${FSKDeploymentProjectName}-Build'
+  CPRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "codepipeline.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - !Ref CPPolicy
+      RoleName: !Sub '${FSKDeploymentProjectName}-Pipeline'
+  CFRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "cloudformation.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - !Ref CPPolicy
+        - "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonRoute53FullAccess"
+        - "arn:aws:iam::aws:policy/CloudWatchEventsFullAccess"
+      RoleName: !Sub '${FSKDeploymentProjectName}-Formation'
+  CBSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub "${FSKDeploymentProjectName}-Pipeline"
+      GroupName: !Sub "${FSKDeploymentProjectName}-Pipeline"
+      Tags:
+        -
+          Key: "Contact"
+          Value: !Ref TagContact
+        -
+          Key: "Service"
+          Value: !Ref TagService
+        -
+          Key: "Environment"
+          Value: !Ref TagEnvironment
+      VpcId: !Ref ECSVpc
+  CBBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: "CODEPIPELINE"
+      Environment:
+        ComputeType: "BUILD_GENERAL1_SMALL"
+        EnvironmentVariables:
+          -
+            Name: "AWS_ACCOUNT_ID"
+            Type: "PLAINTEXT"
+            Value: !Ref "AWS::AccountId"
+          -
+            Name: "IMAGE_NAME"
+            Type: "PLAINTEXT"
+            Value: !Ref ECSImageName
+          -
+            Name: "PROJECT_DIR"
+            Type: "PLAINTEXT"
+            Value: !Ref CBProjectDirEnv
+          -
+            Name: "DEPLOYMENT_PROJECT_BUILD_NUMBER"
+            Type: "PLAINTEXT"
+            Value: !Ref CBBuildNumber
+          -
+            Name: "DEPLOYMENT_PROJECT_NAME"
+            Type: "PLAINTEXT"
+            Value: !Ref FSKDeploymentProjectName
+          -
+            Name: "RELEASE_VERSION"
+            Type: "PLAINTEXT"
+            Value: !Ref ECSReleaseVersion
+        Image: "aws/codebuild/standard:2.0"
+        PrivilegedMode: true
+        Type: "LINUX_CONTAINER"
+      Name: !Sub "${FSKDeploymentProjectName}-Build"
+      ServiceRole: !GetAtt CBRole.Arn
+      Source:
+        Type: "CODEPIPELINE"
+      Tags:
+        -
+          Key: "Contact"
+          Value: !Ref TagContact
+        -
+          Key: "Service"
+          Value: !Ref TagService
+        -
+          Key: "Environment"
+          Value: !Ref TagEnvironment
+  CPPipe:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref CodeBucket
+        Type: "S3"
+      Name: !Ref FSKDeploymentProjectName
+      RoleArn: !GetAtt CPRole.Arn
+      Stages:
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: "Source"
+                Owner: "AWS"
+                Provider: "S3"
+                Version: "1"
+              Configuration:
+                PollForSourceChanges: true
+                S3Bucket: !Ref CodeBucket
+                S3ObjectKey: !Ref CodeZip
+              Name: "Get-Source"
+              OutputArtifacts:
+                -
+                  Name: "SourceCode"
+              Region: !Ref CPRegion
+          Name: "Source"
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: "Build"
+                Owner: "AWS"
+                Provider: "CodeBuild"
+                Version: "1"
+              Configuration:
+                ProjectName: !Sub "${FSKDeploymentProjectName}-Build"
+              InputArtifacts:
+                -
+                  Name: "SourceCode"
+              Name: "Build-Source"
+              OutputArtifacts:
+                -
+                  Name: "Deployment"
+              Region: !Ref CPRegion
+          Name: "Build"
+        -
+          Actions:
+            -
+              ActionTypeId:
+                Category: "Deploy"
+                Owner: "AWS"
+                Provider: "CloudFormation"
+                Version: "1"
+              Configuration:
+                ActionMode: "CREATE_UPDATE"
+                Capabilities: "CAPABILITY_NAMED_IAM"
+                ParameterOverrides: !Sub '{
+                  "FSKDeploymentProjectName": "${FSKDeploymentProjectName}",
+                  "ECSUseSSL": "${ECSUseSSL}",
+                  "ECSLogRegion": "${ECSLogRegion}",
+                  "ECSVpc": "${ECSVpc}",
+                  "ECSSubnet1": "${ECSSubnet1}",
+                  "ECSSubnet2": "${ECSSubnet2}",
+                  "ECSCertificate": "${ECSCertificate}",
+                  "ECSHealthCheck": "${ECSHealthCheck}",
+                  "ECSDomainName": "${ECSDomainName}",
+                  "ECSDNSName": "${ECSDNSName}",
+                  "TagContact": "${TagContact}",
+                  "TagService": "${TagService}",
+                  "TagEnvironment": "${TagEnvironment}"
+                }'
+                RoleArn: !GetAtt CFRole.Arn
+                StackName: !Ref ECSStackName
+                TemplatePath: "Deployment::deployment.yml"
+              InputArtifacts:
+                -
+                  Name: "Deployment"
+              Name: "Deploy-Build"
+              Region: !Ref CPRegion
+          Name: "Deploy"
+  CBBuildNumber:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref CBBuildNumberName
+      Type: "String"
+      Value: "1"
