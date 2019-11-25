@@ -1,4 +1,4 @@
-#Introduction 
+# Introduction 
 This project is intended to give teams building serverless container applications based on
 [Fargate](https://aws.amazon.com/fargate/) technology a quick start.  It includes:
 1. A sample web service, written in both C# and Python, for accessing a password hash database
@@ -7,7 +7,7 @@ This project is intended to give teams building serverless container application
 services
 4. Miscellaneous python scripts to bootstrap the CodePipeline
 
-#Prerequisites
+# Prerequisites
 NOTE: For simplicity, this starter kit assumes the VPC is setup in default mode where all subnets are public with an
 Internet Gateway attached.  This causes the Fargate containers to require a public IP address which is not good practice.
 1. Use the included `samples/dump.sql` file to create an [RDS](https://aws.amazon.com/rds/) instance with a Postgres
@@ -18,7 +18,7 @@ the correct username and password for the `decryptor` database
 [ECS](https://aws.amazon.com/ecs/)
 4. Create a [Route53](https://aws.amazon.com/route53/) public hosted zone suitable to act as the endpoint for the web services
 
-#Getting Started
+# Getting Started
 1. Fork and Clone this starter kit repository
 2. Modify `deployment/config.py` by changing all `placeholder` values with values that correspond to your AWS account
 AND by changing the `language` setting as desired
