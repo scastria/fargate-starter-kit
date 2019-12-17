@@ -88,11 +88,11 @@ def configure_aws_credentials():
     os.environ['AWS_PROFILE'] = credentials_profile
 
 
-def get_s3_url(bucket_name, object_key):
+def get_s3_url(name_bucket, object_key):
     # Configure AWS credentials from profile
     configure_aws_credentials()
     s3_client = boto3.client('s3', region_name=region_name)
-    return s3_client.meta.endpoint_url + '/' + bucket_name + '/' + object_key
+    return s3_client.meta.endpoint_url + '/' + name_bucket + '/' + object_key
 
 
 def get_container_image_url(repo_name):
@@ -137,17 +137,17 @@ def zip_this_file(file_name):
     return True
 
 
-def upload_file(file_path, bucket_name, object_key):
+def upload_file(file_path, name_bucket, object_key):
     s3_resource = boto3.resource('s3', region_name=region_name)
-    bucket = s3_resource.Bucket(bucket_name)
+    bucket = s3_resource.Bucket(name_bucket)
     bucket.upload_file(file_path, object_key)
 
 
-def bucket_exists(bucket_name):
+def bucket_exists(name_bucket):
     s3_client = boto3.client('s3', region_name=region_name)
     retval = True
     try:
-        s3_client.head_bucket(Bucket=bucket_name)
+        s3_client.head_bucket(Bucket=name_bucket)
     except ClientError as err:
         if err.response['Error']['Code'] not in ['403', '404']:
             raise
@@ -155,20 +155,20 @@ def bucket_exists(bucket_name):
     return retval
 
 
-def create_bucket(bucket_name):
+def create_bucket(name_bucket):
     s3_client = boto3.client('s3', region_name=region_name)
     if region_name == 'us-east-1':  # Need to handle this region differently due to legacy weirdness in AWS API.
-        s3_client.create_bucket(Bucket=bucket_name, ACL='private')
+        s3_client.create_bucket(Bucket=name_bucket, ACL='private')
     else:
-        s3_client.create_bucket(Bucket=bucket_name, ACL='private',
+        s3_client.create_bucket(Bucket=name_bucket, ACL='private',
                                 CreateBucketConfiguration={'LocationConstraint': region_name})
 
     # Verify successful creation
     s3_resource = boto3.resource('s3', region_name=region_name)
-    bucket = s3_resource.Bucket(bucket_name)
+    bucket = s3_resource.Bucket(name_bucket)
     bucket.wait_until_exists()
     # Turn on versioning
-    s3_client.put_bucket_versioning(Bucket=bucket_name,
+    s3_client.put_bucket_versioning(Bucket=name_bucket,
                                     VersioningConfiguration={'Status': 'Enabled'})
     return bucket
 
